@@ -86,7 +86,6 @@ def update_image():
     width = 1280
     height = 720
 
-    cargoCamSink = cs.getVideo(camera=cam)
     cargoCamOutput = cs.putVideo("Cargo Camera", width, height)
 
     try:
