@@ -1,8 +1,8 @@
 import cv2
 from enum import Enum
 
-red_hsv = [[0.0, 10.0], [100.0, 255.0], [0.0, 255.0]]
-blue_hsv = [[92.64479747502895, 139.0909090909091], [78.75706203239785, 255.0], [0.0, 255.0]]
+red_hsv = [[0.0, 10.0], [115.0, 255.0], [0.0, 255.0]]
+blue_hsv = [[91, 163], [79, 255.0], [0.0, 255.0]]
 
 
 class RedCargo:
@@ -66,7 +66,6 @@ class RedCargo:
         """
         Runs the pipeline and sets all outputs to new values.
         """
-
         # Step Crop_Image0:
         self.__crop_image_input = source0
         (self.crop_image_output) = self.__crop_image_input[50:720][0:1280]
@@ -311,7 +310,6 @@ class BlueCargo:
         """
         Runs the pipeline and sets all outputs to new values.
         """
-
         # Step Crop_Image0:
         self.__crop_image_input = source0
         (self.crop_image_output) = self.__crop_image_input[50:720][0:1280]

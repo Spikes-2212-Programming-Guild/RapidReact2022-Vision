@@ -5,6 +5,7 @@ from grip import RedCargo
 from grip import BlueCargo
 import cv2
 from threading import Thread
+from cscore import CameraServer
 
 frame = None
 capturing = True
@@ -18,9 +19,11 @@ def main():
     :return:
     """
     global contour_count
+
     while frame is None or not NetworkTables.isConnected():  # checks if something is wrong
         print(f"NT connection: {NetworkTables.isConnected()}")
     [networkTableImageProcessing.delete(s) for s in networkTableImageProcessing.getKeys()]
+
     while True:
         update_pipeline()
         print("Processing...")
@@ -51,6 +54,18 @@ def update_image():
     nt = NetworkTables.getTable("Image Processing")
     last_id = cam_id = int(nt.getNumber("currentCamera", defaultValue=0))
     cam = cv2.VideoCapture(cam_id)
+
+    cargoCamTable = NetworkTables.getTable("CameraPublisher/cargoCam")
+    cargoCamEntry = cargoCamTable.getEntry("streams")
+
+    cs = CameraServer()
+    cs.enableLogging()
+
+    width = 1280
+    height = 720
+
+    cargoCamOutput = cs.putVideo("Cargo Camera", width, height)
+
     try:
         while capturing:
             cam_id = int(nt.getNumber("currentCamera", defaultValue=0))
@@ -59,6 +74,9 @@ def update_image():
                 cam = cv2.VideoCapture(cam_id)
             last_id = cam_id
             success, frame = cam.read()
+
+            cargoCamOutput.putFrame(frame)
+
     finally:
         cam.release()
         print("Thread's done!")
