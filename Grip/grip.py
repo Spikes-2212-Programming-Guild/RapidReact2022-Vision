@@ -66,8 +66,13 @@ class RedCargo:
         """
         Runs the pipeline and sets all outputs to new values.
         """
+
+        # Step Crop_Image0:
+        self.__crop_image_input = source0
+        (self.crop_image_output) = self.__crop_image_input[50:720][0:1280]
+
         # Step Resize_Image0:
-        self.__resize_image_input = source0
+        self.__resize_image_input = self.crop_image_output
         (self.resize_image_output) = self.__resize_image(self.__resize_image_input, self.__resize_image_width,
                                                          self.__resize_image_height, self.__resize_image_interpolation)
 
