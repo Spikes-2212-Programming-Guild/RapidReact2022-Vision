@@ -52,11 +52,16 @@ def update_image():
     global frame
     global capturing
     nt = NetworkTables.getTable("Image Processing")
-    last_id = cam_id = int(nt.getNumber("currentCamera", defaultValue=0))
-    cam = cv2.VideoCapture(cam_id)
+    cargoCam_last_id = cargoCam_id = int(nt.getNumber("currentCamera", defaultValue=0))
+    backCam_last_id2 = backCam_id = int(nt.getNumber("currentCamera2", defaultValue=2))
+    cargoCam = cv2.VideoCapture(cargoCam_id)
+    backCam = cv2.VideoCapture(backCam_id)
 
     cargoCamTable = NetworkTables.getTable("CameraPublisher/cargoCam")
-    cargoCamEntry = cargoCamTable.getEntry("streams")
+    backCamTable = NetworkTables.getTable("CameraPublisher/backCamera")
+
+    cargoCamTable.getEntry("streams")
+    backCamTable.getEntry("streams")
 
     cs = CameraServer()
     cs.enableLogging()
@@ -65,20 +70,30 @@ def update_image():
     height = 720
 
     cargoCamOutput = cs.putVideo("Cargo Camera", width, height)
+    backCamOutput = cs.putVideo("Back Camera", width, height)
 
     try:
         while capturing:
-            cam_id = int(nt.getNumber("currentCamera", defaultValue=0))
-            if last_id != cam_id:
-                cam.release()
-                cam = cv2.VideoCapture(cam_id)
-            last_id = cam_id
-            success, frame = cam.read()
+            cargoCam_id = int(nt.getNumber("currentCamera", defaultValue=0))
+            backCam_id = int(nt.getNumber("backCamera", defaultValue=2))
+            if cargoCam_last_id != cargoCam_id:
+                cargoCam.release()
+                cargoCam = cv2.VideoCapture(cargoCam_id)
+
+            if backCam_last_id2 != backCam_id:
+                backCam.release()
+                backCam = cv2.VideoCapture(backCam_id)
+
+            cargoCam_last_id = cargoCam_id
+            backCam_last_id2 = backCam_id
+            success, frame = cargoCam.read()
+            success2, frame2 = backCam.read()
 
             cargoCamOutput.putFrame(frame)
+            backCamOutput.putFrame(frame2)
 
     finally:
-        cam.release()
+        cargoCam.release()
         print("Thread's done!")
 
 
