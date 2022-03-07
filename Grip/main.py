@@ -45,57 +45,79 @@ def update_pipeline():
     print(f"PIPE {pipeline}")
 
 
-def update_image():
-    """
-    grabs the frame from the right camera that needs to be processed.
-    """
-    global cargo_frame
+def autonomous_camera_server_thread(defaultPort, name):
+    global cs
     global capturing
-    nt = NetworkTables.getTable("Image Processing")
-    cargo_cam_last_id = cargo_cam_id = int(nt.getNumber("current Cargo Camera", defaultValue=0))
-    back_cam_last_id = back_cam_id = int(nt.getNumber("current Back Camera", defaultValue=2))
-    cargo_cam = cv2.VideoCapture(cargo_cam_id)
-    back_cam = cv2.VideoCapture(back_cam_id)
+    global cargo_frame
+    nt = NetworkTables.getTable("Camera ports")
+    last_cam_id = cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
+    cam = cv2.VideoCapture(cam_id)
+    cam_table = NetworkTables.getTable("CameraPublisher/" + name)
+    cam_table.getEntry("streams")
 
-    cargo_cam_table = NetworkTables.getTable("CameraPublisher/cargoCam")
-    back_cam_table = NetworkTables.getTable("CameraPublisher/backCamera")
-
-    cargo_cam_table.getEntry("streams")
-    back_cam_table.getEntry("streams")
-
-    cs = CameraServer()
-    cs.enableLogging()
+    if not cs:
+        cs = CameraServer()
+        cs.enableLogging()
 
     width = 1280
     height = 720
 
-    cargo_cam_output = cs.putVideo("Cargo Camera", width, height)
-    back_cam_output = cs.putVideo("Back Camera", width, height)
+    cam_output = cs.putVideo(name, width, height)
 
     try:
         while capturing:
-            cargo_cam_id = int(nt.getNumber("current Cargo Camera", defaultValue=0))
-            back_cam_id = int(nt.getNumber("current Back Camera", defaultValue=2))
-            if cargo_cam_last_id != cargo_cam_id:
-                cargo_cam.release()
-                cargo_cam = cv2.VideoCapture(cargo_cam_id)
+            cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
+            if cam_id != last_cam_id:
+                cam.release()
+                cam = cv2.VideoCapture(cam_id)
 
-            if back_cam_last_id != back_cam_id:
-                back_cam.release()
-                back_cam = cv2.VideoCapture(back_cam_id)
+            last_cam_id = cam_id
+            success, cargo_frame = cam.read()
 
-            cargo_cam_last_id = cargo_cam_id
-            back_cam_last_id = back_cam_id
-            cargo_success, cargo_frame = cargo_cam.read()
-            back_success, back_frame = back_cam.read()
+            if not success:
+                continue
 
-            cargo_cam_output.putFrame(cargo_frame)
-            back_cam_output.putFrame(back_frame)
-
+            cam_output.putFrame(cargo_frame)
     finally:
-        cargo_cam.release()
-        back_cam.release()
-        print("Thread's done!")
+        cam.release()
+        print(name + " thread done!")
+
+
+def camera_server_thread(defaultPort, name):
+    global cs
+    global capturing
+    nt = NetworkTables.getTable("Camera ports")
+    last_cam_id = cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
+    cam = cv2.VideoCapture(cam_id)
+    cam_table = NetworkTables.getTable("CameraPublisher/" + name)
+    cam_table.getEntry("streams")
+
+    if not cs:
+        cs = CameraServer()
+        cs.enableLogging()
+
+    width = 1280
+    height = 720
+
+    cam_output = cs.putVideo(name, width, height)
+
+    try:
+        while capturing:
+            cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
+            if cam_id != last_cam_id:
+                cam.release()
+                cam = cv2.VideoCapture(cam_id)
+
+            last_cam_id = cam_id
+            success, frame = cam.read()
+
+            if not success:
+                continue
+
+            cam_output.putFrame(frame)
+    finally:
+        cam.release()
+        print(name + " thread done!")
 
 
 def put_contours_in_nt(contours):
@@ -142,8 +164,10 @@ def end():
 if __name__ == "__main__":
     print("Starting")
     NetworkTables.initialize("10.22.12.2")  # The ip of the roboRIO
-    t = Thread(target=update_image)
-    t.start()
+    intake_camera_server_thread = Thread(target=autonomous_camera_server_thread, args=(0, "cargoCam"))
+    back_camera_server_thread = Thread(target=camera_server_thread, args=(2, "backCam"))
+    intake_camera_server_thread.start()
+    back_camera_server_thread.start()
     time.sleep(1)
     networkTableImageProcessing = NetworkTables.getTable("Image Processing")
     try:
