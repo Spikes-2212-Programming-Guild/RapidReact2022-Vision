@@ -60,8 +60,8 @@ def autonomous_camera_server_thread(defaultPort, name):
         cs = CameraServer()
         cs.enableLogging()
 
-    width = 1280
-    height = 720
+    width = 640
+    height = 480
 
     cam_output = cs.putVideo(name, width, height)
 
@@ -75,7 +75,7 @@ def autonomous_camera_server_thread(defaultPort, name):
             last_cam_id = cam_id
             success, cargo_frame = cam.read()
 
-            if not success:
+            if not success or cargo_frame or cargo_frame is None:
                 continue
 
             cam_output.putFrame(cargo_frame)
@@ -97,8 +97,8 @@ def camera_server_thread(defaultPort, name):
         cs = CameraServer()
         cs.enableLogging()
 
-    width = 1280
-    height = 720
+    width = 640
+    height = 480
 
     cam_output = cs.putVideo(name, width, height)
 
@@ -169,6 +169,7 @@ if __name__ == "__main__":
     back_camera_server_thread = Thread(target=camera_server_thread, args=(2, "backCam"))
     intake_camera_server_thread.start()
     back_camera_server_thread.start()
+    time.sleep(1)
     networkTableImageProcessing = NetworkTables.getTable("Image Processing")
     try:
         main()
