@@ -11,6 +11,7 @@ cargo_frame = None
 capturing = True
 pipeline = None
 contour_count = 1
+cs = None
 
 
 def main():
@@ -168,7 +169,6 @@ if __name__ == "__main__":
     back_camera_server_thread = Thread(target=camera_server_thread, args=(2, "backCam"))
     intake_camera_server_thread.start()
     back_camera_server_thread.start()
-    time.sleep(1)
     networkTableImageProcessing = NetworkTables.getTable("Image Processing")
     try:
         main()
