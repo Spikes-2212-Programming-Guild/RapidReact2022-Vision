@@ -7,7 +7,7 @@ import cv2
 from threading import Thread
 from cscore import CameraServer
 
-frame = None
+cargo_frame = None
 capturing = True
 pipeline = None
 contour_count = 1
@@ -20,14 +20,14 @@ def main():
     """
     global contour_count
 
-    while frame is None or not NetworkTables.isConnected():  # checks if something is wrong
+    while cargo_frame is None or not NetworkTables.isConnected():  # checks if something is wrong
         print(f"NT connection: {NetworkTables.isConnected()}")
     [networkTableImageProcessing.delete(s) for s in networkTableImageProcessing.getKeys()]
 
     while True:
         update_pipeline()
         print("Processing...")
-        pipeline.process(frame)
+        pipeline.process(cargo_frame)
         contours = sorted(pipeline.filter_contours_output, key=cv2.contourArea, reverse=True)
         contour_count = max(contour_count, len(contours))
         put_contours_in_nt(contours)
@@ -49,19 +49,19 @@ def update_image():
     """
     grabs the frame from the right camera that needs to be processed.
     """
-    global frame
+    global cargo_frame
     global capturing
     nt = NetworkTables.getTable("Image Processing")
-    cargoCam_last_id = cargoCam_id = int(nt.getNumber("currentCamera", defaultValue=0))
-    backCam_last_id2 = backCam_id = int(nt.getNumber("currentCamera2", defaultValue=2))
-    cargoCam = cv2.VideoCapture(cargoCam_id)
-    backCam = cv2.VideoCapture(backCam_id)
+    cargo_cam_last_id = cargo_cam_id = int(nt.getNumber("current Cargo Camera", defaultValue=0))
+    back_cam_last_id = back_cam_id = int(nt.getNumber("current Back Camera", defaultValue=2))
+    cargo_cam = cv2.VideoCapture(cargo_cam_id)
+    back_cam = cv2.VideoCapture(back_cam_id)
 
-    cargoCamTable = NetworkTables.getTable("CameraPublisher/cargoCam")
-    backCamTable = NetworkTables.getTable("CameraPublisher/backCamera")
+    cargo_cam_table = NetworkTables.getTable("CameraPublisher/cargoCam")
+    back_cam_table = NetworkTables.getTable("CameraPublisher/backCamera")
 
-    cargoCamTable.getEntry("streams")
-    backCamTable.getEntry("streams")
+    cargo_cam_table.getEntry("streams")
+    back_cam_table.getEntry("streams")
 
     cs = CameraServer()
     cs.enableLogging()
@@ -69,31 +69,32 @@ def update_image():
     width = 1280
     height = 720
 
-    cargoCamOutput = cs.putVideo("Cargo Camera", width, height)
-    backCamOutput = cs.putVideo("Back Camera", width, height)
+    cargo_cam_output = cs.putVideo("Cargo Camera", width, height)
+    back_cam_output = cs.putVideo("Back Camera", width, height)
 
     try:
         while capturing:
-            cargoCam_id = int(nt.getNumber("currentCamera", defaultValue=0))
-            backCam_id = int(nt.getNumber("backCamera", defaultValue=2))
-            if cargoCam_last_id != cargoCam_id:
-                cargoCam.release()
-                cargoCam = cv2.VideoCapture(cargoCam_id)
+            cargo_cam_id = int(nt.getNumber("current Cargo Camera", defaultValue=0))
+            back_cam_id = int(nt.getNumber("current Back Camera", defaultValue=2))
+            if cargo_cam_last_id != cargo_cam_id:
+                cargo_cam.release()
+                cargo_cam = cv2.VideoCapture(cargo_cam_id)
 
-            if backCam_last_id2 != backCam_id:
-                backCam.release()
-                backCam = cv2.VideoCapture(backCam_id)
+            if back_cam_last_id != back_cam_id:
+                back_cam.release()
+                back_cam = cv2.VideoCapture(back_cam_id)
 
-            cargoCam_last_id = cargoCam_id
-            backCam_last_id2 = backCam_id
-            success, frame = cargoCam.read()
-            success2, frame2 = backCam.read()
+            cargo_cam_last_id = cargo_cam_id
+            back_cam_last_id = back_cam_id
+            cargo_success, cargo_frame = cargo_cam.read()
+            back_success, back_frame = back_cam.read()
 
-            cargoCamOutput.putFrame(frame)
-            backCamOutput.putFrame(frame2)
+            cargo_cam_output.putFrame(cargo_frame)
+            back_cam_output.putFrame(back_frame)
 
     finally:
-        cargoCam.release()
+        cargo_cam.release()
+        back_cam.release()
         print("Thread's done!")
 
 
