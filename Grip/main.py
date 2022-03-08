@@ -42,7 +42,6 @@ def update_pipeline():
         pipeline = BlueCargo()
     else:
         pipeline = RedCargo()
-    print(f"PIPE {pipeline}")
 
 
 def update_image():
@@ -54,8 +53,11 @@ def update_image():
     nt = NetworkTables.getTable("Image Processing")
     cargo_cam_last_id = cargo_cam_id = int(nt.getNumber("current Cargo Camera", defaultValue=0))
     back_cam_last_id = back_cam_id = int(nt.getNumber("current Back Camera", defaultValue=2))
+    print("opening cameras")
     cargo_cam = cv2.VideoCapture(cargo_cam_id)
+    print("opened cargo cam")
     back_cam = cv2.VideoCapture(back_cam_id)
+    print("opened back cam")
 
     cargo_cam_table = NetworkTables.getTable("CameraPublisher/cargoCam")
     back_cam_table = NetworkTables.getTable("CameraPublisher/backCamera")
@@ -142,6 +144,7 @@ def end():
 if __name__ == "__main__":
     print("Starting")
     NetworkTables.initialize("10.22.12.2")  # The ip of the roboRIO
+    print("NT Initialized")
     t = Thread(target=update_image)
     t.start()
     time.sleep(1)
