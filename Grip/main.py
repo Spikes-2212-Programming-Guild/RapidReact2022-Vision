@@ -19,6 +19,7 @@ def main():
     :return:
     """
     global contour_count
+    global pipeline
 
     while cargo_frame is None or not NetworkTables.isConnected():  # checks if something is wrong
         print(f"NT connection: {NetworkTables.isConnected()}")
@@ -50,6 +51,7 @@ def update_image():
     """
     global cargo_frame
     global capturing
+    global pipeline
     nt = NetworkTables.getTable("Image Processing")
     cargo_cam_last_id = cargo_cam_id = int(nt.getNumber("current Cargo Camera", defaultValue=0))
     back_cam_last_id = back_cam_id = int(nt.getNumber("current Back Camera", defaultValue=2))
@@ -61,9 +63,11 @@ def update_image():
 
     cargo_cam_table = NetworkTables.getTable("CameraPublisher/cargoCam")
     back_cam_table = NetworkTables.getTable("CameraPublisher/backCamera")
+    grip_table = NetworkTables.getTable("CameraPublisher/GRIP")
 
     cargo_cam_table.getEntry("streams")
     back_cam_table.getEntry("streams")
+    grip_table.getEntry("streams")
 
     cs = CameraServer()
     cs.enableLogging()
@@ -73,6 +77,7 @@ def update_image():
 
     cargo_cam_output = cs.putVideo("Cargo Camera", width, height)
     back_cam_output = cs.putVideo("Back Camera", width, height)
+    grip_output = cs.putVideo("GRIP", width, height)
 
     try:
         while capturing:
@@ -93,6 +98,10 @@ def update_image():
 
             cargo_cam_output.putFrame(cargo_frame)
             back_cam_output.putFrame(back_frame)
+            try:
+                grip_output.putFrame(pipeline.filter_contours_output)
+            except AttributeError:
+                grip_output.putFrame(cargo_frame)
 
     finally:
         cargo_cam.release()
