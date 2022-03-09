@@ -140,7 +140,7 @@ def put_contours_in_nt(contours):
     for i in range(len(contours), contour_count):
         nt = networkTableImageProcessing.getSubTable(f"contour {i}")
         nt.putBoolean(f'isUpdated', False)
-        nt.putNumber("x", 0)
+        nt.putNumber("x", 10)
 
 
 def end():
