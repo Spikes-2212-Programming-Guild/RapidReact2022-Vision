@@ -105,8 +105,10 @@ def update_image():
             cargo_success, cargo_frame = cargo_cam.read()
             back_success, back_frame = back_cam.read()
 
-            cargo_cam_output.putFrame(cargo_frame)
-            back_cam_output.putFrame(back_frame)
+            if cargo_success:
+                cargo_cam_output.putFrame(cargo_frame)
+            if back_success:
+                back_cam_output.putFrame(back_frame)
 
     finally:
         cargo_cam.release()
