@@ -12,6 +12,8 @@ capturing = True
 pipeline = None
 contour_count = 1
 
+cs = None
+
 
 def main():
     """
@@ -20,16 +22,23 @@ def main():
     """
     global contour_count
     global pipeline
+    global cs
 
     while cargo_frame is None or not NetworkTables.isConnected():  # checks if something is wrong
         print(f"NT connection: {NetworkTables.isConnected()}")
     [networkTableImageProcessing.delete(s) for s in networkTableImageProcessing.getKeys()]
+
+    while cs is None:
+        pass
+    grip_output = cs.putVideo("GRIP", 300, 230)
 
     while True:
         update_pipeline()
         print("Processing...")
         pipeline.process(cargo_frame)
         contours = sorted(pipeline.filter_contours_output, key=cv2.contourArea, reverse=True)
+        grip_output.putFrame(pipeline.mask_output)
+
         contour_count = max(contour_count, len(contours))
         put_contours_in_nt(contours)
 
@@ -52,6 +61,7 @@ def update_image():
     global cargo_frame
     global capturing
     global pipeline
+    global cs
     nt = NetworkTables.getTable("Image Processing")
     cargo_cam_last_id = cargo_cam_id = int(nt.getNumber("current Cargo Camera", defaultValue=0))
     back_cam_last_id = back_cam_id = int(nt.getNumber("current Back Camera", defaultValue=2))
@@ -77,7 +87,6 @@ def update_image():
 
     cargo_cam_output = cs.putVideo("Cargo Camera", width, height)
     back_cam_output = cs.putVideo("Back Camera", width, height)
-    grip_output = cs.putVideo("GRIP", width, height)
 
     try:
         while capturing:
@@ -98,10 +107,6 @@ def update_image():
 
             cargo_cam_output.putFrame(cargo_frame)
             back_cam_output.putFrame(back_frame)
-            try:
-                grip_output.putFrame(pipeline.filter_contours_output)
-            except AttributeError:
-                grip_output.putFrame(cargo_frame)
 
     finally:
         cargo_cam.release()
