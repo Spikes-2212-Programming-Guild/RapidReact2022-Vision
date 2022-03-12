@@ -1,37 +1,42 @@
 import time
+from datetime import datetime
 
 from networktables import NetworkTables
 from grip import RedCargo
 from grip import BlueCargo
 import cv2
-from threading import Thread
+from threading import Thread, Lock
 from cscore import CameraServer
 
 cargo_frame = None
-capturing = True
 pipeline = None
+
 contour_count = 1
-cs = None
+
+lock = Lock()
 
 
-def main():
+def start_pipeline(networkTableImageProcessing):
     """
     uses the GRIP pipline to process the current frame
     :return:
     """
-    global contour_count
+    global cargo_frame
+    global pipeline
+    contour_count = 1
 
     while cargo_frame is None or not NetworkTables.isConnected():  # checks if something is wrong
         print(f"NT connection: {NetworkTables.isConnected()}")
+        print(f"Cargo frame is none? {cargo_frame is None}")
     [networkTableImageProcessing.delete(s) for s in networkTableImageProcessing.getKeys()]
 
     while True:
         update_pipeline()
-        print("Processing...")
-        pipeline.process(cargo_frame)
+        with lock:
+            pipeline.process(cargo_frame)
         contours = sorted(pipeline.filter_contours_output, key=cv2.contourArea, reverse=True)
         contour_count = max(contour_count, len(contours))
-        put_contours_in_nt(contours)
+        put_contours_in_nt(contours, networkTableImageProcessing)
 
 
 def update_pipeline():
@@ -46,64 +51,71 @@ def update_pipeline():
     print(f"PIPE {pipeline}")
 
 
-def autonomous_camera_server_thread(defaultPort, name):
-    global cs
-    global capturing
+def autonomous_camera_server_thread(cs, defaultPort, name):
     global cargo_frame
+    writer = cv2.VideoWriter(f"images/{datetime.now().strftime('%H:%M:%S')}.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 20, (320, 240))
     nt = NetworkTables.getTable("Camera ports")
     last_cam_id = cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
     cam = cv2.VideoCapture(cam_id)
+    cam.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
     cam_table = NetworkTables.getTable("CameraPublisher/" + name)
     cam_table.getEntry("streams")
 
-    if not cs:
-        cs = CameraServer()
-        cs.enableLogging()
-
-    width = 640
-    height = 480
+    width = 320
+    height = 240
 
     cam_output = cs.putVideo(name, width, height)
 
+    first_time = time.gmtime()
+
+    done_writing = False
+
     try:
-        while capturing:
+        while True:
+            current_time = time.gmtime()
             cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
             if cam_id != last_cam_id:
                 cam.release()
                 cam = cv2.VideoCapture(cam_id)
 
             last_cam_id = cam_id
-            success, cargo_frame = cam.read()
+            with lock:
+                success, cargo_frame = cam.read()
 
-            if not success or cargo_frame or cargo_frame is None:
+            if not success or cargo_frame is None:
+                print(f"Could not read from camera in thread {name}")
                 continue
 
+            if 15 >= current_time.tm_sec - first_time.tm_sec > 0 and not done_writing:
+                print(current_time.tm_sec - first_time.tm_sec)
+                writer.write(cargo_frame)
+            elif current_time.tm_sec - first_time.tm_sec < 0:
+                done_writing = True
+
             cam_output.putFrame(cargo_frame)
+
     finally:
         cam.release()
         print(name + " thread done!")
 
 
-def camera_server_thread(defaultPort, name):
-    global cs
-    global capturing
+def camera_server_thread(cs, defaultPort, name):
     nt = NetworkTables.getTable("Camera ports")
     last_cam_id = cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
     cam = cv2.VideoCapture(cam_id)
+    cam.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
     cam_table = NetworkTables.getTable("CameraPublisher/" + name)
     cam_table.getEntry("streams")
 
-    if not cs:
-        cs = CameraServer()
-        cs.enableLogging()
-
-    width = 640
-    height = 480
+    width = 320
+    height = 240
 
     cam_output = cs.putVideo(name, width, height)
 
     try:
-        while capturing:
+        while True:
             cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
             if cam_id != last_cam_id:
                 cam.release()
@@ -121,7 +133,7 @@ def camera_server_thread(defaultPort, name):
         print(name + " thread done!")
 
 
-def put_contours_in_nt(contours):
+def put_contours_in_nt(contours, networkTableImageProcessing):
     """
     puts the data from the bounding rectangle of the contours in the network-tables.
     :param contours: the contours to get the data from
@@ -153,8 +165,7 @@ def end():
     the end of the program - closes everything and deletes everything from the nnetwork-tables
     :return:
     """
-    global capturing
-    capturing = False
+    networkTableImageProcessing = NetworkTables.getTable("Image Processing")
     [networkTableImageProcessing.delete(s) for s in networkTableImageProcessing.getKeys()]
 
     for sub in networkTableImageProcessing.getSubTables():
@@ -162,18 +173,24 @@ def end():
         [sub.delete(k) for k in sub.getKeys()]
 
 
-if __name__ == "__main__":
+def main():
+    cs = CameraServer()
+    cs.enableLogging()
+
     print("Starting")
     NetworkTables.initialize("10.22.12.2")  # The ip of the roboRIO
-    intake_camera_server_thread = Thread(target=autonomous_camera_server_thread, args=(0, "cargoCam"))
-    back_camera_server_thread = Thread(target=camera_server_thread, args=(2, "backCam"))
+    intake_camera_server_thread = Thread(target=autonomous_camera_server_thread, args=(cs, 0, "cargoCam"))
     intake_camera_server_thread.start()
-    back_camera_server_thread.start()
     time.sleep(1)
     networkTableImageProcessing = NetworkTables.getTable("Image Processing")
+
     try:
-        main()
+        start_pipeline(networkTableImageProcessing)
 
     finally:
         end()
         print("Job's done!")
+
+
+if __name__ == "__main__":
+    main()
