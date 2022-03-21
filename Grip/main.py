@@ -69,13 +69,12 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
     cam_table = NetworkTables.getTable("CameraPublisher/" + name)
     cam_table.getEntry("streams")
 
+    is_in_auto_table = NetworkTables.getTable("robot namespace")
+
     width = 320
     height = 240
 
     cam_output = cs.putVideo(name, width, height)
-
-    first_time = time.gmtime()
-    current_time = time.gmtime()
 
     done_writing = False
 
@@ -94,12 +93,8 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
                 print(f"Could not read from camera in thread {name}")
                 continue
 
-            if 15 >= current_time.tm_sec - first_time.tm_sec > 0 and not done_writing:
-                current_time = time.gmtime()
-                print(current_time.tm_sec - first_time.tm_sec)
+            if is_in_auto_table.getBoolean("is in auto", False):
                 writer.write(cargo_frame)
-            elif current_time.tm_sec - first_time.tm_sec < 0:
-                done_writing = True
 
             cam_output.putFrame(cargo_frame)
 
