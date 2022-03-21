@@ -16,7 +16,7 @@ contour_count = 1
 lock = Lock()
 
 
-def start_pipeline(networkTableImageProcessing):
+def start_pipeline(networkTableImageProcessing, cs):
     """
     uses the GRIP pipline to process the current frame
     :return:
@@ -25,16 +25,23 @@ def start_pipeline(networkTableImageProcessing):
     global pipeline
     contour_count = 1
 
+    cam_table = NetworkTables.getTable("CameraPublisher/GRIP")
+    cam_table.getEntry("streams")
+
     while cargo_frame is None or not NetworkTables.isConnected():  # checks if something is wrong
         print(f"NT connection: {NetworkTables.isConnected()}")
         print(f"Cargo frame is none? {cargo_frame is None}")
     [networkTableImageProcessing.delete(s) for s in networkTableImageProcessing.getKeys()]
+
+    grip_output = cs.putVideo("GRIP", 300, 230)
 
     while True:
         update_pipeline()
         with lock:
             pipeline.process(cargo_frame)
         contours = sorted(pipeline.filter_contours_output, key=cv2.contourArea, reverse=True)
+        grip_output.putFrame(pipeline.mask_output)
+
         contour_count = max(contour_count, len(contours))
         put_contours_in_nt(contours, networkTableImageProcessing)
 
@@ -68,12 +75,12 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
     cam_output = cs.putVideo(name, width, height)
 
     first_time = time.gmtime()
+    current_time = time.gmtime()
 
     done_writing = False
 
     try:
         while True:
-            current_time = time.gmtime()
             cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
             if cam_id != last_cam_id:
                 cam.release()
@@ -88,6 +95,7 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
                 continue
 
             if 15 >= current_time.tm_sec - first_time.tm_sec > 0 and not done_writing:
+                current_time = time.gmtime()
                 print(current_time.tm_sec - first_time.tm_sec)
                 writer.write(cargo_frame)
             elif current_time.tm_sec - first_time.tm_sec < 0:
@@ -185,7 +193,7 @@ def main():
     networkTableImageProcessing = NetworkTables.getTable("Image Processing")
 
     try:
-        start_pipeline(networkTableImageProcessing)
+        start_pipeline(networkTableImageProcessing, cs)
 
     finally:
         end()
