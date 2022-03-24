@@ -1,36 +1,50 @@
+import os
 import time
+from datetime import datetime
 
 from networktables import NetworkTables
 from grip import RedCargo
 from grip import BlueCargo
 import cv2
-from threading import Thread
+from threading import Thread, Lock
 from cscore import CameraServer
 
-frame = None
-capturing = True
+cargo_frame = None
 pipeline = None
+
 contour_count = 1
 
+lock = Lock()
 
-def main():
+
+def start_pipeline(networkTableImageProcessing, cs):
     """
     uses the GRIP pipline to process the current frame
     :return:
     """
-    global contour_count
+    global cargo_frame
+    global pipeline
+    contour_count = 1
 
-    while frame is None or not NetworkTables.isConnected():  # checks if something is wrong
+    cam_table = NetworkTables.getTable("CameraPublisher/GRIP")
+    cam_table.getEntry("streams")
+
+    while cargo_frame is None or not NetworkTables.isConnected():  # checks if something is wrong
         print(f"NT connection: {NetworkTables.isConnected()}")
+        print(f"Cargo frame is none? {cargo_frame is None}")
     [networkTableImageProcessing.delete(s) for s in networkTableImageProcessing.getKeys()]
+
+    grip_output = cs.putVideo("GRIP", 300, 230)
 
     while True:
         update_pipeline()
-        print("Processing...")
-        pipeline.process(frame)
+        with lock:
+            pipeline.process(cargo_frame)
         contours = sorted(pipeline.filter_contours_output, key=cv2.contourArea, reverse=True)
+        grip_output.putFrame(pipeline.mask_output)
+
         contour_count = max(contour_count, len(contours))
-        put_contours_in_nt(contours)
+        put_contours_in_nt(contours, networkTableImageProcessing)
 
 
 def update_pipeline():
@@ -45,44 +59,99 @@ def update_pipeline():
     print(f"PIPE {pipeline}")
 
 
-def update_image():
-    """
-    grabs the frame from the right camera that needs to be processed.
-    """
-    global frame
-    global capturing
-    nt = NetworkTables.getTable("Image Processing")
-    last_id = cam_id = int(nt.getNumber("currentCamera", defaultValue=0))
+def autonomous_camera_server_thread(cs, defaultPort, name):
+    global cargo_frame
+    # writer = cv2.VideoWriter(f"/home/pi/Grip/images/{datetime.now().strftime('%H:%M:%S')}.avi",
+    #                          cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 20, (320, 240))
+    nt = NetworkTables.getTable("Camera ports")
+    last_cam_id = cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
     cam = cv2.VideoCapture(cam_id)
+    cam.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+    cam_table = NetworkTables.getTable("CameraPublisher/" + name)
+    cam_table.getEntry("streams")
 
-    cargoCamTable = NetworkTables.getTable("CameraPublisher/cargoCam")
-    cargoCamEntry = cargoCamTable.getEntry("streams")
+    # is_in_auto_table = NetworkTables.getTable("robot namespace")
 
-    cs = CameraServer()
-    cs.enableLogging()
+    width = 320
+    height = 240
 
-    width = 1280
-    height = 720
+    cam_output = cs.putVideo(name, width, height)
 
-    cargoCamOutput = cs.putVideo("Cargo Camera", width, height)
+    done_writing = False
+
+    last_frame_time = time.time()
+    seconds_per_frame = 2
+    index = 0
+    os.chdir(f"/home/pi/Grip/images/")
+    new_dir = datetime.now().strftime('%H:%M:%S') + "/"
+    os.mkdir(new_dir)
+    os.chdir(new_dir)
 
     try:
-        while capturing:
-            cam_id = int(nt.getNumber("currentCamera", defaultValue=0))
-            if last_id != cam_id:
+        while True:
+            cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
+            if cam_id != last_cam_id:
                 cam.release()
                 cam = cv2.VideoCapture(cam_id)
-            last_id = cam_id
-            success, frame = cam.read()
 
-            cargoCamOutput.putFrame(frame)
+            last_cam_id = cam_id
+            with lock:
+                success, cargo_frame = cam.read()
+
+            if not success or cargo_frame is None:
+                print(f"Could not read from camera in thread {name}")
+                continue
+
+            # if is_in_auto_table.getBoolean("is in auto", True):
+            # writer.write(cargo_frame)
+
+            if time.time() > last_frame_time + seconds_per_frame:
+                cv2.imwrite(f"{index}.jpg", cargo_frame)
+                last_frame_time = time.time()
+                index += 1
+
+            cam_output.putFrame(cargo_frame)
 
     finally:
         cam.release()
-        print("Thread's done!")
+        print(name + " thread done!")
 
 
-def put_contours_in_nt(contours):
+def camera_server_thread(cs, defaultPort, name):
+    nt = NetworkTables.getTable("Camera ports")
+    last_cam_id = cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
+    cam = cv2.VideoCapture(cam_id)
+    cam.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+    cam_table = NetworkTables.getTable("CameraPublisher/" + name)
+    cam_table.getEntry("streams")
+
+    width = 320
+    height = 240
+
+    cam_output = cs.putVideo(name, width, height)
+
+    try:
+        while True:
+            cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
+            if cam_id != last_cam_id:
+                cam.release()
+                cam = cv2.VideoCapture(cam_id)
+
+            last_cam_id = cam_id
+            success, frame = cam.read()
+
+            if not success:
+                continue
+
+            cam_output.putFrame(frame)
+    finally:
+        cam.release()
+        print(name + " thread done!")
+
+
+def put_contours_in_nt(contours, networkTableImageProcessing):
     """
     puts the data from the bounding rectangle of the contours in the network-tables.
     :param contours: the contours to get the data from
@@ -114,8 +183,7 @@ def end():
     the end of the program - closes everything and deletes everything from the nnetwork-tables
     :return:
     """
-    global capturing
-    capturing = False
+    networkTableImageProcessing = NetworkTables.getTable("Image Processing")
     [networkTableImageProcessing.delete(s) for s in networkTableImageProcessing.getKeys()]
 
     for sub in networkTableImageProcessing.getSubTables():
@@ -123,16 +191,24 @@ def end():
         [sub.delete(k) for k in sub.getKeys()]
 
 
-if __name__ == "__main__":
+def main():
+    cs = CameraServer()
+    cs.enableLogging()
+
     print("Starting")
     NetworkTables.initialize("10.22.12.2")  # The ip of the roboRIO
-    t = Thread(target=update_image)
-    t.start()
+    intake_camera_server_thread = Thread(target=autonomous_camera_server_thread, args=(cs, 0, "cargoCam"))
+    intake_camera_server_thread.start()
     time.sleep(1)
     networkTableImageProcessing = NetworkTables.getTable("Image Processing")
+
     try:
-        main()
+        start_pipeline(networkTableImageProcessing, cs)
 
     finally:
         end()
         print("Job's done!")
+
+
+if __name__ == "__main__":
+    main()
