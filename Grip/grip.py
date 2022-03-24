@@ -1,10 +1,8 @@
 import cv2
 from enum import Enum
 
-red_hsv = [[0.0, 10.0], [188.0, 255.0], [89.0, 255.0]]
+red_hsv = [[0.0, 10.0], [183.0, 255.0], [131.0, 255.0]]
 blue_hsv = [[84, 110], [57, 191.0], [69.0, 255.0]]
-# red_hsv = [[125.0, 180.0], [110.0, 255.0], [62.0, 255.0]]
-# blue_hsv = [[84, 110], [90, 191.0], [69.0, 255.0]]
 
 
 class RedCargo:
@@ -24,7 +22,7 @@ class RedCargo:
 
         self.__blur_input = self.resize_image_output
         self.__blur_type = BlurType.Gaussian_Blur
-        self.__blur_radius = 9.729727324064788
+        self.__blur_radius = 5
 
         self.blur_output = None
 
