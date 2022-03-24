@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import datetime
 
@@ -60,7 +61,8 @@ def update_pipeline():
 
 def autonomous_camera_server_thread(cs, defaultPort, name):
     global cargo_frame
-    writer = cv2.VideoWriter(f"images/{datetime.now().strftime('%H:%M:%S')}.avi",cv2.VideoWriter_fourcc('M','J','P','G'), 20, (320, 240))
+    # writer = cv2.VideoWriter(f"/home/pi/Grip/images/{datetime.now().strftime('%H:%M:%S')}.avi",
+    #                          cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 20, (320, 240))
     nt = NetworkTables.getTable("Camera ports")
     last_cam_id = cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
     cam = cv2.VideoCapture(cam_id)
@@ -69,7 +71,7 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
     cam_table = NetworkTables.getTable("CameraPublisher/" + name)
     cam_table.getEntry("streams")
 
-    is_in_auto_table = NetworkTables.getTable("robot namespace")
+    # is_in_auto_table = NetworkTables.getTable("robot namespace")
 
     width = 320
     height = 240
@@ -77,6 +79,14 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
     cam_output = cs.putVideo(name, width, height)
 
     done_writing = False
+
+    last_frame_time = time.time()
+    seconds_per_frame = 2
+    index = 0
+    os.chdir(f"/home/pi/Grip/images/")
+    new_dir = datetime.now().strftime('%H:%M:%S') + "/"
+    os.mkdir(new_dir)
+    os.chdir(new_dir)
 
     try:
         while True:
@@ -93,8 +103,13 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
                 print(f"Could not read from camera in thread {name}")
                 continue
 
-            if is_in_auto_table.getBoolean("is in auto", False):
-                writer.write(cargo_frame)
+            # if is_in_auto_table.getBoolean("is in auto", True):
+            # writer.write(cargo_frame)
+
+            if time.time() > last_frame_time + seconds_per_frame:
+                cv2.imwrite(f"{index}.jpg", cargo_frame)
+                last_frame_time = time.time()
+                index += 1
 
             cam_output.putFrame(cargo_frame)
 
