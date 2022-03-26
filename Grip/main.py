@@ -1,18 +1,19 @@
-import os
 import time
-from datetime import datetime
-
-from networktables import NetworkTables
-from grip import RedCargo
-from grip import BlueCargo
-import cv2
 from threading import Thread, Lock
+
+import cv2
 from cscore import CameraServer
+from networktables import NetworkTables
+
+from grip import BlueCargo
+from grip import RedCargo
 
 cargo_frame = None
 pipeline = None
 
 contour_count = 1
+
+SETPOINT = -10
 
 lock = Lock()
 
@@ -83,10 +84,10 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
     last_frame_time = time.time()
     seconds_per_frame = 2
     index = 0
-    os.chdir(f"/home/pi/Grip/images/")
-    new_dir = datetime.now().strftime('%H:%M:%S') + "/"
-    os.mkdir(new_dir)
-    os.chdir(new_dir)
+    # os.chdir(f"/home/pi/Grip/images/")
+    # new_dir = datetime.now().strftime('%H:%M:%S') + "/"
+    # os.mkdir(new_dir)
+    # os.chdir(new_dir)
 
     try:
         while True:
@@ -106,10 +107,10 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
             # if is_in_auto_table.getBoolean("is in auto", True):
             # writer.write(cargo_frame)
 
-            if time.time() > last_frame_time + seconds_per_frame:
-                cv2.imwrite(f"{index}.jpg", cargo_frame)
-                last_frame_time = time.time()
-                index += 1
+            # if time.time() > last_frame_time + seconds_per_frame:
+            #     cv2.imwrite(f"{index}.jpg", cargo_frame)
+            #     last_frame_time = time.time()
+            #     index += 1
 
             cam_output.putFrame(cargo_frame)
 
@@ -156,7 +157,7 @@ def put_contours_in_nt(contours, networkTableImageProcessing):
     puts the data from the bounding rectangle of the contours in the network-tables.
     :param contours: the contours to get the data from
     """
-    for i, c in enumerate(contours):
+    for i, c in enumerate(contours[0:contour_count]):
         nt = networkTableImageProcessing.getSubTable(f"contour {i}")
         nt.putNumber(f'area', cv2.contourArea(c))
 
@@ -175,7 +176,7 @@ def put_contours_in_nt(contours, networkTableImageProcessing):
     for i in range(len(contours), contour_count):
         nt = networkTableImageProcessing.getSubTable(f"contour {i}")
         nt.putBoolean(f'isUpdated', False)
-        nt.putNumber("x", 0)
+        nt.putNumber("x", SETPOINT)
 
 
 def end():
