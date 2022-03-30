@@ -1,4 +1,6 @@
+import os
 import time
+from datetime import datetime
 from threading import Thread, Lock
 
 import cv2
@@ -62,8 +64,6 @@ def update_pipeline():
 
 def autonomous_camera_server_thread(cs, defaultPort, name):
     global cargo_frame
-    # writer = cv2.VideoWriter(f"/home/pi/Grip/images/{datetime.now().strftime('%H:%M:%S')}.avi",
-    #                          cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 20, (320, 240))
     nt = NetworkTables.getTable("Camera ports")
     last_cam_id = cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
     cam = cv2.VideoCapture(cam_id)
@@ -79,15 +79,36 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
 
     cam_output = cs.putVideo(name, width, height)
 
-    done_writing = False
+    match_type_name = "qual"
+    # station = 0
+    match_number = 0
+    try:
+        info_table = NetworkTables.getTable("FMSInfo")
+        match_type = info_table.getNumber("MatchType", 0)
+        match_number = info_table.getNumber("MatchNumber", 0)
+        # station = info_table.getNumber("StationNumber", 0)
+
+        if match_type == 1:
+            match_type_name = "pr"
+        elif match_type == 2:
+            match_type_name = "qual"
+        elif match_type == 3:
+            match_type_name = "play"
+    except:
+        pass
 
     last_frame_time = time.time()
     seconds_per_frame = 2
     index = 0
-    # os.chdir(f"/home/pi/Grip/images/")
-    # new_dir = datetime.now().strftime('%H:%M:%S') + "/"
-    # os.mkdir(new_dir)
-    # os.chdir(new_dir)
+
+    # with open("/home/pi/Grip/images/DCMP/names.txt", "a") as f:
+    #     f.write(str(match_type_name) + "STATION:" + str(station) + "\n")
+
+    # if match_type != 0:
+    os.chdir(f"/home/pi/Grip/images/DCMP")
+    new_dir = f"{match_type_name} - {match_number} {datetime.now().strftime('%H:%M:%S')}/"
+    os.mkdir(new_dir)
+    os.chdir(new_dir)
 
     try:
         while True:
@@ -104,13 +125,14 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
                 print(f"Could not read from camera in thread {name}")
                 continue
 
-            # if is_in_auto_table.getBoolean("is in auto", True):
-            # writer.write(cargo_frame)
-
-            # if time.time() > last_frame_time + seconds_per_frame:
-            #     cv2.imwrite(f"{index}.jpg", cargo_frame)
-            #     last_frame_time = time.time()
-            #     index += 1
+            # if match_type != 0:
+            try:
+                if time.time() > last_frame_time + seconds_per_frame:
+                    cv2.imwrite(f"{index}.jpg", cargo_frame)
+                    last_frame_time = time.time()
+                    index += 1
+            except:
+                pass
 
             cam_output.putFrame(cargo_frame)
 
@@ -121,7 +143,7 @@ def autonomous_camera_server_thread(cs, defaultPort, name):
 
 def camera_server_thread(cs, defaultPort, name):
     nt = NetworkTables.getTable("Camera ports")
-    last_cam_id = cam_id = int(nt.getNumber("current " + name, defaultValue=defaultPort))
+    last_cam_id = cam_id = int(nt.getNumber("cu rrent " + name, defaultValue=defaultPort))
     cam = cv2.VideoCapture(cam_id)
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
